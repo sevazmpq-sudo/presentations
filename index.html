@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>Disaster Recovery as a Service</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reset.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-black: #000000;
+            --text-white: #ffffff;
+            --accent-yellow: #FCFF2E;
+            --accent-orange: #FF6F00;
+            --grid-unit: 8px;
+        }
+
+        body, .reveal {
+            background-color: var(--bg-black);
+            font-family: 'Inter', sans-serif;
+            color: var(--text-white);
+        }
+
+        .reveal h1, .reveal h2, .reveal h3, .reveal h4 {
+            font-family: 'Inter', sans-serif;
+            color: var(--text-white);
+            text-transform: none;
+            font-weight: 700;
+            margin-bottom: calc(var(--grid-unit) * 6);
+            letter-spacing: -0.02em;
+        }
+
+        .reveal h2 {
+            font-size: 56px;
+            line-height: 1.2;
+            text-align: left;
+            margin-bottom: calc(var(--grid-unit) * 4);
+        }
+
+        .reveal p, .reveal div, .reveal li {
+            font-family: 'Inter', sans-serif;
+            font-weight: 400;
+            color: var(--text-white);
+            line-height: 1.5;
+            font-size: 28px;
+        }
+        
+        .reveal .text-medium {
+            font-weight: 500 !important;
+        }
+        
+        .reveal .text-small {
+            font-size: 20px;
+            opacity: 0.8;
+        }
+
+        /* Abstract Background Effects */
+        .bg-blobs {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -2; overflow: hidden; filter: blur(140px);
+        }
+        .blob { position: absolute; border-radius: 50%; opacity: 0.35; }
+        .b1 { 
+            width: 70vw; height: 70vw; 
+            background: linear-gradient(135deg, #FFECB7, #FF6600, #A1021B); 
+            top: -20vh; left: -10vw; 
+            animation: float 25s infinite alternate linear; 
+        }
+        .b2 { 
+            width: 60vw; height: 60vw; 
+            background: linear-gradient(135deg, #A1021B, #FF0000, #000000); 
+            bottom: -20vh; right: -10vw; 
+            animation: float 22s infinite alternate-reverse linear; 
+        }
+        .b3 { 
+            width: 80vw; height: 80vw; 
+            background: linear-gradient(135deg, #FEAA13, #F9EB6E, #D69303); 
+            top: 30vh; left: 40vw; 
+            animation: float 30s infinite alternate linear; 
+            opacity: 0.25;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(20vw, 15vh) scale(1.15); }
+        }
+
+        .noise-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -1; opacity: 0.15; pointer-events: none;
+            background: url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>');
+        }
+
+        .motion-blur-shape {
+            position: fixed; width: 200vw; height: 15vh;
+            background: linear-gradient(90deg, transparent, rgba(255,111,0,0.2), transparent);
+            filter: blur(30px); transform: rotate(-15deg);
+            z-index: -1; pointer-events: none;
+            animation: streak 12s infinite linear;
+        }
+        @keyframes streak {
+            0% { transform: translateX(-150vw) rotate(-15deg); }
+            100% { transform: translateX(100vw) rotate(-15deg); }
+        }
+
+        /* Essential Layout Elements */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: calc(var(--grid-unit) * 5);
+            position: relative;
+            overflow: hidden;
+            text-align: left;
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+            display: flex; flex-direction: column;
+        }
+        .glass-card:hover {
+            box-shadow: 0 24px 60px rgba(255, 111, 0, 0.15);
+            border-color: rgba(252, 255, 46, 0.2);
+            transform: translateY(-4px);
+        }
+        
+        .border-beam::before {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: conic-gradient(from 0deg, transparent 70%, rgba(255, 111, 0, 0.5) 80%, transparent 100%);
+            animation: rotate-beam 4s linear infinite; z-index: -1; opacity: 0; transition: opacity 0.3s ease;
+        }
+        .glass-card:hover.border-beam::before { opacity: 1; }
+        @keyframes rotate-beam { 100% { transform: rotate(360deg); } }
+
+        .accent-pill {
+            display: inline-flex; align-items: center; justify-content: flex-start;
+            background: linear-gradient(135deg, var(--accent-yellow) 0%, var(--accent-orange) 100%);
+            border-radius: 16px; 
+            padding: 16px; 
+            gap: 16px;
+            box-shadow: 0 8px 24px rgba(255, 111, 0, 0.3);
+            margin-bottom: calc(var(--grid-unit) * 4);
+            align-self: flex-start;
+            transition: all 0.3s ease;
+        }
+        .accent-pill:hover {
+            box-shadow: 0 0 32px rgba(252, 255, 46, 0.5);
+            transform: scale(1.02);
+        }
+        .accent-pill .icon {
+            width: 32px; height: 32px; fill: #000; flex-shrink: 0;
+        }
+        .accent-pill .text {
+            color: var(--text-white); font-weight: 700; font-size: 24px;
+            padding-right: 16px;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+            line-height: 1.2;
+        }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--grid-unit) * 4); }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: calc(var(--grid-unit) * 4); }
+
+        ul.custom-list { list-style: none; padding-left: 0; margin-left: 0; text-align: left; }
+        ul.custom-list li {
+            position: relative; padding-left: calc(var(--grid-unit) * 4);
+            margin-bottom: calc(var(--grid-unit) * 2);
+        }
+        ul.custom-list.spaced li { margin-bottom: calc(var(--grid-unit) * 4); }
+        ul.custom-list li::before {
+            content: ''; position: absolute; left: 0; top: 12px; width: 8px; height: 8px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-yellow), var(--accent-orange));
+            box-shadow: 0 0 8px var(--accent-orange);
+        }
+
+        /* Specialized Graphics */
+        .timeline { display: flex; justify-content: space-between; gap: calc(var(--grid-unit) * 3); position: relative; }
+        .timeline::after {
+            content: ''; position: absolute; top: 80px; left: 5%; right: 5%; height: 2px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.1), var(--accent-orange), rgba(255,255,255,0.1));
+            z-index: 0;
+        }
+        .timeline-step { flex: 1; z-index: 1; position: relative; }
+
+        .big-number {
+            font-size: 48px; font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-yellow), var(--accent-orange));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            margin-bottom: 24px;
+        }
+
+        /* Fix presentation layout padding */
+        .reveal .slides section {
+            height: 100%; display: flex; flex-direction: column; justify-content: center;
+            padding: 40px !important; box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-blobs">
+        <div class="blob b1"></div>
+        <div class="blob b2"></div>
+        <div class="blob b3"></div>
+    </div>
+    <div class="motion-blur-shape"></div>
+    <div class="noise-overlay"></div>
+
+    <div class="reveal">
+        <div class="slides">
+
+            <!-- Слайд 1 -->
+            <section>
+                <h2 class="fragment fade-up" data-fragment-index="1">Цена критического сбоя инфраструктуры</h2>
+                <div class="fragment fade-up text-medium" data-fragment-index="2" style="text-align: left; margin-bottom: 48px; opacity: 0.8; font-size: 32px;">
+                    От&nbsp;отключения интернета до&nbsp;пожара в&nbsp;дата-центре — последствия измеряются миллионами
+                </div>
+                <div class="grid-3 text-left">
+                    <div class="glass-card border-beam fragment fade-up" data-fragment-index="3">
+                        <div class="accent-pill">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm1 14h-2v-2h2v14zm0-4h-2V7h2v5z"/></svg>
+                            <span class="text">Форс-мажор</span>
+                        </div>
+                        <div class="text-medium">Любая непредвиденная ситуация полностью останавливает инфраструктуру бизнеса</div>
+                    </div>
+                    <div class="glass-card border-beam fragment fade-up" data-fragment-index="4">
+                        <div class="accent-pill">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 6h2v4h-2V7zm0 6h2v2h-2v-2z"/></svg>
+                            <span class="text">Риски простоя</span>
+                        </div>
+                        <div class="text-medium">Остановка операционной деятельности и&nbsp;высокий риск потери данных</div>
+                    </div>
+                    <div class="glass-card border-beam fragment fade-up" data-fragment-index="5">
+                        <div class="accent-pill">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M16 18l2.29-2.29-4.88-4.88-4 4L2 7.41 3.41 6l6 6 4-4 6.3 6.29L22 12v6z"/></svg>
+                            <span class="text">Прямые убытки</span>
+                        </div>
+                        <div class="text-medium">Ежеминутная потеря прибыли и&nbsp;уступка доли рынка ключевым конкурентам</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Слайд 2 -->
+            <section>
+                <h2 class="fragment fade-up" data-fragment-index="1">Реальный кейс — кибератака шифровальщика</h2>
+                <div class="timeline fragment fade-up" data-fragment-index="2" style="margin-top: 48px;">
+                    <div class="timeline-step glass-card border-beam fragment fade-up" data-fragment-index="3">
+                        <div class="big-number">01</div>
+                        <div class="text-medium">Злоумышленники проникают в&nbsp;сеть через уязвимости периметра</div>
+                    </div>
+                    <div class="timeline-step glass-card border-beam fragment fade-up" data-fragment-index="4">
+                        <div class="big-number">02</div>
+                        <div class="text-medium">Бизнес полностью останавливается из-за&nbsp;массивного шифрования данных</div>
+                    </div>
+                    <div class="timeline-step glass-card border-beam fragment fade-up" data-fragment-index="5">
+                        <div class="big-number">03</div>
+                        <div class="text-medium">Долгие дни уходят на&nbsp;тяжёлые переговоры и&nbsp;попытки восстановления</div>
+                    </div>
+                </div>
+                <div class="glass-card fragment fade-up border-beam" data-fragment-index="6" style="margin-top: 48px; border-color: rgba(255,111,0,0.4); text-align: center;">
+                    <div class="text-medium" style="font-size: 36px;">
+                        Прямой убыток компании за&nbsp;время простоя составил <span style="color:var(--accent-yellow); font-weight:700;">200 млн рублей</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Слайд 3 -->
+            <section>
+                <h2 class="fragment fade-up" data-fragment-index="1">Решение — Disaster Recovery as a Service</h2>
+                <div class="fragment fade-up text-medium text-left" data-fragment-index="2" style="margin-bottom: 64px; opacity: 0.8; font-size: 32px;">
+                    DRaaS (Катастрофоустойчивость как услуга) — резервирование инфраструктуры для непрерывной работы бизнеса
+                </div>
+                <div class="grid-2 fragment fade-up" data-fragment-index="3" style="align-items: center; position: relative;">
+                    <div class="glass-card border-beam" style="text-align: center; border-style: dashed;">
+                        <svg viewBox="0 0 24 24" fill="var(--text-white)" style="width:64px; height:64px; margin-bottom:24px; opacity:0.6;"><path d="M4 6h16v12H4z"/></svg>
+                        <div style="font-size: 32px; font-weight: 700;">Ваш дата-центр</div>
+                        <div class="text-small">Основная инфраструктура</div>
+                    </div>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="url(#grad)" stroke-width="2" style="width:80px; height:80px; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:10;">
+                        <defs><linearGradient id="grad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#FCFF2E"/><stop offset="100%" stop-color="#FF6F00"/></linearGradient></defs>
+                        <path d="M5 12h12M13 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <div class="glass-card border-beam fragment fade-up" data-fragment-index="4" style="text-align: center; box-shadow: 0 0 60px rgba(255,111,0,0.3);">
+                        <svg viewBox="0 0 24 24" fill="url(#grad)" style="width:64px; height:64px; margin-bottom:24px;"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
+                        <div style="font-size: 32px; font-weight: 700; color: var(--accent-yellow);">Резервная площадка DRaaS</div>
+                        <div class="text-small">Горячий резерв и&nbsp;моментальное переключение</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Слайд 4 -->
+            <section>
+                <h2 class="fragment fade-up" data-fragment-index="1">Гибкая архитектура резервирования</h2>
+                <div class="fragment fade-up text-medium text-left" data-fragment-index="2" style="margin-bottom: 48px; opacity: 0.8; font-size: 32px;">
+                    Выбирайте масштаб защиты, опираясь на&nbsp;потребности вашей компании
+                </div>
+                <div class="grid-2">
+                    <div class="glass-card border-beam fragment fade-up" data-fragment-index="3">
+                        <div class="accent-pill">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/></svg>
+                            <span class="text">Вся инфраструктура</span>
+                        </div>
+                        <ul class="custom-list spaced text-medium">
+                            <li class="fragment fade-up" data-fragment-index="4">Полная репликация систем;</li>
+                            <li class="fragment fade-up" data-fragment-index="5">Максимальный уровень контроля;</li>
+                            <li class="fragment fade-up" data-fragment-index="6">Подходит для крупного энтерпрайз-сегмента.</li>
+                        </ul>
+                    </div>
+                    <div class="glass-card border-beam fragment fade-up" data-fragment-index="7">
+                        <div class="accent-pill">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3z"/></svg>
+                            <span class="text">Точечное покрытие</span>
+                        </div>
+                        <ul class="custom-list spaced text-medium">
+                            <li class="fragment fade-up" data-fragment-index="8">Защита исключительно критичных зон;</li>
+                            <li class="fragment fade-up" data-fragment-index="9">Глубокая оптимизация ИТ-бюджета;</li>
+                            <li class="fragment fade-up" data-fragment-index="10">Индивидуальная адаптация под ваш бизнес.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Слайд 5 -->
+            <section>
+                <h2 class="fragment fade-up" data-fragment-index="1">Оценка критичности систем</h2>
+                <div class="fragment fade-up text-medium text-left" data-fragment-index="2" style="margin-bottom: 48px; opacity: 0.8; font-size: 32px;">
+                    Мы&nbsp;вместе определим, что жизненно важно для бизнеса, а&nbsp;что может подождать
+                </div>
+                <div class="glass-card border-beam fragment fade-up text-left" data-fragment-index="3">
+                    <div style="display: grid; grid-template-columns: 300px 1fr; gap: 32px; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 24px;">
+                        <div class="fragment fade-up" data-fragment-index="4" style="color: var(--accent-orange); font-weight: 700; font-size: 32px;">Tier 1<br><span style="font-size: 20px; font-weight: 400; color: rgba(255,255,255,0.6);">Критический</span></div>
+                        <div class="fragment fade-up" data-fragment-index="4" class="text-medium" style="font-size: 28px;">Простой недопустим. Прямые убытки с&nbsp;первой минуты</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 300px 1fr; gap: 32px; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 24px 0;">
+                        <div class="fragment fade-up" data-fragment-index="5" style="color: var(--text-white); font-weight: 700; font-size: 32px;">Tier 2<br><span style="font-size: 20px; font-weight: 400; color: rgba(255,255,255,0.6);">Важный</span></div>
+                        <div class="fragment fade-up" data-fragment-index="5" class="text-medium" style="font-size: 28px;">Допустим простой до&nbsp;нескольких часов без фатальных последствий</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 300px 1fr; gap: 32px; align-items: center; padding-top: 24px;">
+                        <div class="fragment fade-up" data-fragment-index="6" style="color: rgba(255,255,255,0.4); font-weight: 700; font-size: 32px;">Tier 3<br><span style="font-size: 20px; font-weight: 400; color: rgba(255,255,255,0.6);">Вспомогательный</span></div>
+                        <div class="fragment fade-up" data-fragment-index="6" class="text-medium" style="font-size: 28px;">Сервисы могут восстанавливаться в&nbsp;течение нескольких дней</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Слайд 6 -->
+            <section>
+                <h2 class="fragment fade-up" data-fragment-index="1">Системы с&nbsp;наивысшим приоритетом реагирования</h2>
+                <div class="grid-3 fragment fade-up" data-fragment-index="2" style="margin-top: 64px;">
+                    <div class="glass-card border-beam fragment fade-up text-center" data-fragment-index="3">
+                        <div class="big-number" style="font-size:40px; margin-bottom: 16px;">1С</div>
+                        <div class="text-small">Ядро финансовой отчетности</div>
+                    </div>
+                    <div class="glass-card border-beam fragment fade-up text-center" data-fragment-index="4">
+                        <div class="big-number" style="font-size:40px; margin-bottom: 16px;">Почта & Чаты</div>
+                        <div class="text-small">Внутренние коммуникации</div>
+                    </div>
+                    <div class="glass-card border-beam fragment fade-up text-center" data-fragment-index="5">
+                        <div class="big-number" style="font-size:40px; margin-bottom: 16px;">ERP-системы</div>
+                        <div class="text-small">Управление ресурсами</div>
+                    </div>
+                    <div class="glass-card border-beam fragment fade-up text-center" data-fragment-index="6" style="grid-column: 1 /span 3;">
+                        <div class="text-medium" style="font-size: 32px;">Всё, что генерирует прибыль и&nbsp;обеспечивает непрерывность операций</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Слайд 7 -->
+            <section>
+                <h2 class="fragment fade-up" data-fragment-index="1">Отраслевая специфика DRaaS</h2>
+                <div class="fragment fade-up text-medium text-left" data-fragment-index="2" style="margin-bottom: 48px; opacity: 0.8; font-size: 32px;">
+                    Ключевые точки отказа зависят от&nbsp;типа вашего бизнеса
+                </div>
+                <div class="grid-2 text-left">
+                    <div class="glass-card border-beam fragment fade-up" data-fragment-index="3">
+                        <div class="accent-pill" style="margin-bottom: 32px;">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                            <span class="text">Электронная коммерция</span>
+                        </div>
+                        <ul class="custom-list spaced text-medium">
+                            <li>Интернет-магазин и&nbsp;веб-сайт;</li>
+                            <li>Мобильные приложения;</li>
+                            <li>Биллинговые системы.</li>
+                        </ul>
+                    </div>
+                    <div class="glass-card border-beam fragment fade-up" data-fragment-index="4">
+                        <div class="accent-pill" style="margin-bottom: 32px;">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M20 8h-3V4H3v13h2v-2h14v2h2v-5l-1-4zm-8-2h6v2h-6V6zm0 4h6v2h-6v-2zM5 13V6h5v7H5z"/></svg>
+                            <span class="text">Логистика и склады</span>
+                        </div>
+                        <ul class="custom-list spaced text-medium">
+                            <li>Учетные системы и&nbsp;1С;</li>
+                            <li>WMS (управление складом);</li>
+                            <li>Маршрутизация отгрузок.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Слайд 8 -->
+            <section>
+                <h2 class="fragment fade-up" data-fragment-index="1">Единый подход к&nbsp;отказоустойчивости</h2>
+                <div class="timeline text-left fragment fade-up" data-fragment-index="2" style="margin-top: 48px;">
+                    <div class="timeline-step glass-card border-beam fragment fade-up" data-fragment-index="3">
+                        <div class="accent-pill" style="margin-bottom: 24px; width: auto;"><svg style="display:none;"></svg><span class="text" style="padding:0;">1. Оценка</span></div>
+                        <div class="text-medium">Правильное описание инфраструктуры и&nbsp;анализ систем</div>
+                    </div>
+                    <div class="timeline-step glass-card border-beam fragment fade-up" data-fragment-index="4">
+                        <div class="accent-pill" style="margin-bottom: 24px; width: auto;"><svg style="display:none;"></svg><span class="text" style="padding:0;">2. Репликация</span></div>
+                        <div class="text-medium">Настройка синхронизации и&nbsp;написание сценариев</div>
+                    </div>
+                    <div class="timeline-step glass-card border-beam fragment fade-up" data-fragment-index="5">
+                        <div class="accent-pill" style="margin-bottom: 24px; width: auto;"><svg style="display:none;"></svg><span class="text" style="padding:0;">3. Автоматизация</span></div>
+                        <div class="text-medium">Моментальное переключение при малейших сбоях</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Слайд 9 -->
+            <section>
+                <h2 class="fragment fade-up" data-fragment-index="1">Фокус на&nbsp;профитгенерящих функциях</h2>
+                <div class="grid-2 fragment fade-up" data-fragment-index="2" style="align-items: center; gap: 64px;">
+                    <div class="glass-card border-beam text-left">
+                        <div class="text-medium" style="margin-bottom: 24px; font-size: 32px;">Главное правило DRaaS</div>
+                        <p style="opacity: 0.8;">Самые критичные бизнес-функции и&nbsp;приложения, приносящие вам реальную прибыль, резервироваться должны в&nbsp;первую очередь.</p>
+                    </div>
+                    <div>
+                        <!-- Pyramid Visualization -->
+                        <div class="fragment fade-up" data-fragment-index="3" style="width: 100%; height: 80px; background: rgba(255,255,255,0.05); margin-bottom: 8px; clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%); display:flex; justify-content:center; align-items:center;">
+                            <span style="opacity: 0.5;">Файловые серверы</span>
+                        </div>
+                        <div class="fragment fade-up" data-fragment-index="4" style="width: 80%; height: 80px; background: rgba(255,255,255,0.1); margin: 0 auto 8px auto; clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%); display:flex; justify-content:center; align-items:center;">
+                            <span style="opacity: 0.8;">Внутренние сервисы</span>
+                        </div>
+                        <div class="fragment fade-up border-beam" data-fragment-index="5" style="width: 60%; height: 100px; background: linear-gradient(135deg, var(--accent-yellow), var(--accent-orange)); margin: 0 auto; clip-path: polygon(30% 0, 70% 0, 100% 100%, 0 100%); display:flex; justify-content:center; align-items:flex-end; padding-bottom: 16px;">
+                            <span style="font-weight: 700; color: #000; text-shadow: none;">Профитгенерящие</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Слайд 10 -->
+            <section>
+                <h2 class="fragment fade-up" data-fragment-index="1">Горячий резерв — мгновенное переключение</h2>
+                <div class="fragment fade-up text-medium text-left" data-fragment-index="2" style="margin-bottom: 48px; opacity: 0.8; font-size: 32px;">
+                    Мы&nbsp;создадим дубликат инфраструктуры вне зависимости от&nbsp;того, где находятся ваши данные
+                </div>
+                <div class="glass-card fragment fade-up" data-fragment-index="3" style="text-align: center;">
+                    <div style="display: flex; justify-content: center; align-items: center; gap: 48px; margin-bottom: 48px;">
+                        <div class="fragment fade-out" data-fragment-index="4" style="font-size: 40px; font-weight: 700;">Ваш ЦОД</div>
+                        <div class="fragment fade-in" data-fragment-index="4" style="font-size: 40px; font-weight: 700; color: red; position: absolute; left: calc(50% - 140px); transform: translateX(-50%);">Ваш ЦОД (Сбой)</div>
+                        <svg class="fragment fade-in" data-fragment-index="5" viewBox="0 0 24 24" fill="none" stroke="var(--accent-orange)" stroke-width="2" style="width:64px; height:64px;"><path d="M5 12h14M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <div class="fragment fade-in" data-fragment-index="5" style="font-size: 40px; font-weight: 700; color: var(--accent-yellow);">Облако DRaaS</div>
+                    </div>
+                    <div class="text-medium fragment fade-up" data-fragment-index="6" style="font-size: 32px;">
+                        Всё оперативно переезжает в&nbsp;наше облако. Бизнес продолжает работать без потери скорости.
+                    </div>
+                </div>
+            </section>
+
+            <!-- Слайд 11 -->
+            <section>
+                <h2 class="fragment fade-up" data-fragment-index="1">Рекомендация: эшелонированная защита</h2>
+                <div class="fragment fade-up text-medium text-left" data-fragment-index="2" style="margin-bottom: 48px; opacity: 0.8; font-size: 32px;">
+                    Именно такие простые вещи защищают инфраструктуру от&nbsp;фатального падения
+                </div>
+                <div class="grid-3 fragment fade-up text-left" data-fragment-index="3">
+                    <div class="glass-card border-beam fragment fade-up" data-fragment-index="4">
+                        <div class="accent-pill">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
+                            <span class="text">Облако</span>
+                        </div>
+                        <div class="text-medium">Использование распределённых вычислительных ресурсов</div>
+                    </div>
+                    <div class="glass-card border-beam fragment fade-up" data-fragment-index="5">
+                        <div class="accent-pill">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+                            <span class="text">DRaaS</span>
+                        </div>
+                        <div class="text-medium">Горячее дублирование инфраструктуры</div>
+                    </div>
+                    <div class="glass-card border-beam fragment fade-up" data-fragment-index="6">
+                        <div class="accent-pill">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M18.81 12.3c.12-.41.19-.83.19-1.3 0-2.76-2.24-5-5-5-2.24 0-4.13 1.47-4.78 3.51-.43-.32-.97-.51-1.54-.51-1.47 0-2.67 1.19-2.67 2.67 0 .2.03.4.08.58C3.89 12.72 3 14.25 3 16c0 2.21 1.79 4 4 4h11c1.66 0 3-1.34 3-3 0-1.89-1.28-3.46-3.13-3.8zM9.54 13L12 10.46 14.46 13h-1.92v3h-1.08v-3H9.54z"/></svg>
+                            <span class="text">Backup</span>
+                        </div>
+                        <div class="text-medium">Надёжное резервное копирование всех данных</div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.min.js"></script>
+    <script>
+        Reveal.initialize({
+            controls: false,
+            progress: true,
+            history: false,
+            center: true,
+            transition: 'fade', /* Overall slide transition */
+            margin: 0.1,
+            width: 1400,
+            height: 900,
+            help: false,
+            keyboard: true
+        });
+
+        // Left mouse click to go next, including fragments
+        // Ensure no interference if clicking inside the presentation container
+        document.querySelector('.reveal').addEventListener('mousedown', function(event) {
+            // Check if left click
+            if (event.button === 0) {
+                // Ignore clicks on links or interactive elements if there were any
+                if (!event.target.closest('a') && !event.target.closest('button')) {
+                    Reveal.next();
+                }
+            }
+        });
+        
+        // Disable context menu to prevent accidental right click menu (optional)
+        document.addEventListener('contextmenu', event => event.preventDefault());
+    </script>
+</body>
+</html>
